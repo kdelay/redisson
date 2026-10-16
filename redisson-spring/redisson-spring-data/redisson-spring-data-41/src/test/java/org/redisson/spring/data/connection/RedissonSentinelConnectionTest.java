@@ -4,10 +4,17 @@ import org.junit.jupiter.api.Test;
 import org.redisson.RedisDockerTest;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
+import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisSentinelConnection;
 import org.springframework.data.redis.connection.RedisServer;
+import org.springframework.data.redis.connection.RedisStringCommands.SetOption;
+import org.springframework.data.redis.connection.SetCondition;
+import org.springframework.data.redis.core.types.Expiration;
 
+import java.nio.ByteBuffer;
+import java.time.Instant;
 import java.util.Collection;
+import java.util.List;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,6 +29,37 @@ public class RedissonSentinelConnectionTest extends RedisDockerTest {
             RedisSentinelConnection connection = factory.getSentinelConnection();
             callback.accept(connection);
         }, 2);
+    }
+
+    @Test
+    public void testWriteCommandsWithReplica() throws InterruptedException {
+        withSentinel((containers, c) -> {
+            RedissonClient redisson = Redisson.create(c);
+            try {
+                RedissonConnectionFactory factory = new RedissonConnectionFactory(redisson);
+                RedisConnection connection = factory.getConnection();
+
+                byte[] key = "key".getBytes();
+                connection.stringCommands().set(key, "value1".getBytes());
+                assertThat(connection.stringCommands().setGet(key, "value2".getBytes(), Expiration.persistent(), SetOption.upsert()))
+                        .isEqualTo("value1".getBytes());
+                assertThat(connection.stringCommands().setGet(key, "value3".getBytes(), SetCondition.upsert(), Expiration.persistent()))
+                        .isEqualTo("value2".getBytes());
+
+                byte[] hash = "hash".getBytes();
+                connection.hashCommands().hSet(hash, "field1".getBytes(), "value1".getBytes());
+                connection.hashCommands().hSet(hash, "field2".getBytes(), "value2".getBytes());
+                long unixTime = Instant.now().plusSeconds(60).getEpochSecond();
+                assertThat(connection.hashCommands().hExpireAt(hash, unixTime, "field1".getBytes())).containsExactly(1L);
+
+                List<ByteBuffer> values = factory.getReactiveConnection().hashCommands()
+                        .hGetEx(ByteBuffer.wrap(hash), Expiration.seconds(60), List.of(ByteBuffer.wrap("field2".getBytes())))
+                        .block();
+                assertThat(values).containsExactly(ByteBuffer.wrap("value2".getBytes()));
+            } finally {
+                redisson.shutdown();
+            }
+        }, 1);
     }
 
     @Test

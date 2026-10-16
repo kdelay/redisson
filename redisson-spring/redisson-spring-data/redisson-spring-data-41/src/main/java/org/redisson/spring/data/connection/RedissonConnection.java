@@ -2985,7 +2985,7 @@ public class RedissonConnection extends AbstractRedisConnection {
             }
         }
 
-        return read(key, ByteArrayCodec.INSTANCE, SET_VALUE, params.toArray());
+        return write(key, ByteArrayCodec.INSTANCE, SET_VALUE, params.toArray());
     }
 
     @Override
@@ -3095,7 +3095,7 @@ public class RedissonConnection extends AbstractRedisConnection {
         args.add(fields.length);
         args.addAll(Arrays.asList(fields));
 
-        return read(key, LongCodec.INSTANCE, HEXPIREAT, args.toArray());
+        return write(key, LongCodec.INSTANCE, HEXPIREAT, args.toArray());
     }
 
     private static final RedisStrictCommand<List<Long>> HPEXPIREAT = new RedisStrictCommand<List<Long>>("HPEXPIREAT", new ObjectListReplayDecoder<>());
@@ -3436,7 +3436,7 @@ public class RedissonConnection extends AbstractRedisConnection {
         params.add("GET");
         appendSetExpiration(params, expiration);
 
-        return read(key, ByteArrayCodec.INSTANCE, SET_VALUE, params.toArray());
+        return write(key, ByteArrayCodec.INSTANCE, SET_VALUE, params.toArray());
     }
 
     @Override
